@@ -4,6 +4,7 @@ pragma solidity ^0.8.12;
 import "./INonfungiblePositionManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import "@openzeppelin/contracts/token/ERC777/IERC777Recipient.sol";
 
@@ -100,6 +101,9 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         return uint128(unlockedLiquidity - position.decreasedLiquidity);
     }
 
+    /// @notice Decrease the liquidity of the position by the provided amount
+    /// @dev The provided `liquidity` value must be less than or equal to the total available liquidity, which
+    /// can be obtained by calling `availableLiquidity`.
     function descreaseLiquidity(
         uint256 tokenId,
         uint128 liquidity,
@@ -110,7 +114,9 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         LockedPosition storage position = _positions[tokenId];
         require(position.owner == msg.sender, "Not authorized");
 
-        // todo: validate that the provided liquidity amount is available to be unlocked
+        uint128 available = availableLiquidity(tokenId);
+        require(liquidity <= available, "Liquidity unavailable");
+        position.decreasedLiquidity += liquidity;
 
         INonfungiblePositionManager manager = INonfungiblePositionManager(position.positionManager);
         INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager.DecreaseLiquidityParams({
@@ -127,6 +133,23 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
 
         token0Contract.transfer(position.owner, amount0);
         token1Contract.transfer(position.owner, amount1);
+    }
+
+    /// @notice Returns the locked Uniswap token to the original owner and deletes the lock token
+    /// @dev This can only be done if the current timestamp is greater than the finish timestamp
+    /// of the locked position.
+    function returnUniswapToken(uint256 tokenId) external {
+        LockedPosition storage position = _positions[tokenId];
+        require(position.owner == msg.sender, "Not authorized");
+
+        uint256 timestamp = block.timestamp;
+        require(timestamp >= position.finishUnlockingTimestamp, "Not completely unlocked");
+
+        IERC721 manager = IERC721(position.positionManager);
+        manager.safeTransferFrom(address(this), position.owner, position.uniswapTokenId);
+
+        delete _uniswapTokenIdsToLock[position.uniswapTokenId];
+        delete _positions[tokenId];
     }
 
     // MARK: - IERC721Receiver
