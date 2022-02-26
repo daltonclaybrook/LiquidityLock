@@ -1,0 +1,17 @@
+{
+  "name": "liquidity-lock",
+  "version": "1.0.0",
+  "description": "A contract used to lock liquidity for Uniswap V3 pools",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "daltonclaybrook <daltonclaybrook@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "truffle": "^5.5.2"
+  },
+  "devDependencies": {
+    "@uniswap/v3-periphery": "^1.4.0"
+  }
+}
