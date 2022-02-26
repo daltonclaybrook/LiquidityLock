@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
+pragma solidity ^0.8.12;
+// Using the v1 abicoder fixes the following compiler error:
+// CompilerError: Stack too deep when compiling inline assembly: Variable headStart is 1 slot(s) too deep inside the stack.
+// pragma abicoder v1;
 
-import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
+import "./INonfungiblePositionManager.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
@@ -36,6 +39,20 @@ contract LiquidityLock is ERC721, IERC721Receiver {
 
     // MARK: - LiquidityLock public interface
 
+    function collect(uint256 tokenId, address recipient, uint128 amount0Max, uint128 amount1Max) external {
+        LockedPosition storage position = _positions[tokenId];
+        require(position.owner == msg.sender, "Not authorized");
+
+        INonfungiblePositionManager manager = INonfungiblePositionManager(position.positionManager);
+        INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
+            tokenId: position.underlyingTokenId,
+            recipient: recipient,
+            amount0Max: amount0Max,
+            amount1Max: amount1Max
+        });
+        manager.collect(params);
+    }
+
     // MARK: - IERC721Receiver
 
     function onERC721Received(
@@ -44,21 +61,7 @@ contract LiquidityLock is ERC721, IERC721Receiver {
         uint256 tokenId,
         bytes calldata data
     ) override external returns (bytes4) {
-        INonfungiblePositionManager manager = INonfungiblePositionManager(msg.sender);
-        (
-            /* uint96 nonce */,
-            /* address operator */,
-            /* address token0 */,
-            /* address token1 */,
-            /* uint24 fee */,
-            /* int24 tickLower */,
-            /* int24 tickUpper */,
-            uint128 liquidity,
-            /* uint256 feeGrowthInside0LastX128 */,
-            /* uint256 feeGrowthInside1LastX128 */,
-            /* uint128 tokensOwed0 */,
-            /* uint128 tokensOwed1 */
-        ) = manager.positions(tokenId);
+        uint128 liquidity = getLiquidityFromPositionManager(tokenId);
 
         // The `data` parameter is expected to contain the start and finish timestamps
         (uint256 startTimestamp, uint256 finishTimestamp) = abi.decode(data, (uint256, uint256));
@@ -75,5 +78,26 @@ contract LiquidityLock is ERC721, IERC721Receiver {
         _nextId++;
 
         return this.onERC721Received.selector;
+    }
+
+    // MARK: - Private helper functions
+
+    function getLiquidityFromPositionManager(uint256 tokenId) private view returns (uint128) {
+        INonfungiblePositionManager manager = INonfungiblePositionManager(msg.sender);
+        (
+            /* uint96 nonce */,
+            /* address operator */,
+            /* address token0 */,
+            /* address token1 */,
+            /* uint24 fee */,
+            /* int24 tickLower */,
+            /* int24 tickUpper */,
+            uint128 liquidity,
+            /* uint256 feeGrowthInside0LastX128 */,
+            /* uint256 feeGrowthInside1LastX128 */,
+            /* uint128 tokensOwed0 */,
+            /* uint128 tokensOwed1 */
+        ) = manager.positions(tokenId);
+        return liquidity;
     }
 }
