@@ -34,6 +34,8 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         /// may differ from the original liquidity of the position if, for example, the position
         /// operator decreased their liquidity before locking the remaining liquidity in this contract.
         uint128 initialLiquidity;
+        /// @dev Tme amount by which the initial liquidity has already been decreased
+        uint128 decreasedLiquidity;
         /// @dev The unix timestamp when the liquidity starts to unlock
         uint256 startUnlockingTimestamp;
         /// @dev The unix timestamp when the liquidity finishes unlocking
@@ -75,6 +77,27 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
     function getLockTokenId(uint256 uniswapTokenId) external view returns (uint256 lockTokenId) {
         lockTokenId = _uniswapTokenIdsToLock[uniswapTokenId];
         require(lockTokenId != 0, "No lock token");
+    }
+
+    /// @notice Returns the total amount of liquidity available to be withdrawn at this time
+    function availableLiquidity(uint256 tokenId) public view returns (uint128) {
+        LockedPosition storage position = _positions[tokenId];
+        require(position.uniswapTokenId != 0, "Invalid token ID");
+        
+        uint256 timestamp = block.timestamp;
+        if (position.startUnlockingTimestamp > timestamp) {
+            // The liquidity has not yet begun to unlock
+            return 0;
+        }
+        if (timestamp >= position.finishUnlockingTimestamp) {
+            // The liquidity is completely unlocked, so all remaining liquidity is available
+            return position.initialLiquidity - position.decreasedLiquidity;
+        }
+
+        // The ratio of liquidity available in parts per thousand (not percent)
+        uint256 unlockPerMille = (timestamp - position.startUnlockingTimestamp) * 1000 / (position.finishUnlockingTimestamp - position.startUnlockingTimestamp);
+        uint256 unlockedLiquidity = position.initialLiquidity * unlockPerMille / 1000;
+        return uint128(unlockedLiquidity - position.decreasedLiquidity);
     }
 
     function descreaseLiquidity(
@@ -132,7 +155,11 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
 
         // The `data` parameter is expected to contain the start and finish timestamps
         (uint256 startTimestamp, uint256 finishTimestamp) = abi.decode(data, (uint256, uint256));
-        require(startTimestamp > 0 && finishTimestamp > 0, "Invalid timestamps");
+        
+        // The start and finish timestamps should be in the future, and the finish timestamp should be
+        // farther in the future than the start timestamp
+        uint256 timestamp = block.timestamp;
+        require(startTimestamp >= timestamp && finishTimestamp > startTimestamp, "Invalid timestamps");
 
         _positions[_nextId] = LockedPosition({
             owner: from,
@@ -141,6 +168,7 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
             token0: token0,
             token1: token1,
             initialLiquidity: liquidity,
+            decreasedLiquidity: 0,
             startUnlockingTimestamp: startTimestamp,
             finishUnlockingTimestamp: finishTimestamp
         });
@@ -160,6 +188,6 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         bytes calldata userData,
         bytes calldata operatorData
     ) external {
-
+        // todo: Do we need to do any validation here?
     }
 }
