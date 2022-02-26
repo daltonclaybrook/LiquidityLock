@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.12;
-// Using the v1 abicoder fixes the following compiler error:
-// CompilerError: Stack too deep when compiling inline assembly: Variable headStart is 1 slot(s) too deep inside the stack.
-// pragma abicoder v1;
 
 import "./INonfungiblePositionManager.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
