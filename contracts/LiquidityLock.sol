@@ -15,9 +15,9 @@ contract LiquidityLock is ERC721, IERC721Receiver {
 
     /// Details about the liquidity position that are locked in this contract
     struct LockedPosition {
-        // The address that is approved for managing this position
-        address operator;
-        // The address of the Uniswap V3 position manager contract that controls the liqudity
+        // The address of the owner of this position
+        address owner;
+        // The address of the Uniswap V3 position manager contract that controls the liquidity
         address positionManager;
         // The token id of the position in the position manager contract
         uint256 underlyingTokenId;
@@ -36,15 +36,10 @@ contract LiquidityLock is ERC721, IERC721Receiver {
 
     // MARK: - LiquidityLock public interface
 
-    function setUnlockTimestamps(uint256 tokenId, uint256 startUnlockingTimestamp, uint256 finishUnlockingTimestamp) external {
-        LockedPosition storage position = _positions[tokenId];
-        require(position.underlyingTokenId != 0, "Invalid tokenId");
-    }
-
     // MARK: - IERC721Receiver
 
     function onERC721Received(
-        address operator,
+        address /*operator*/,
         address from,
         uint256 tokenId,
         bytes calldata data
@@ -52,7 +47,7 @@ contract LiquidityLock is ERC721, IERC721Receiver {
         INonfungiblePositionManager manager = INonfungiblePositionManager(msg.sender);
         (
             /* uint96 nonce */,
-            address operator,
+            /* address operator */,
             /* address token0 */,
             /* address token1 */,
             /* uint24 fee */,
@@ -64,6 +59,20 @@ contract LiquidityLock is ERC721, IERC721Receiver {
             /* uint128 tokensOwed0 */,
             /* uint128 tokensOwed1 */
         ) = manager.positions(tokenId);
+
+        // The `data` parameter is expected to contain the start and finish timestamps
+        (uint256 startTimestamp, uint256 finishTimestamp) = abi.decode(data, (uint256, uint256));
+        require(startTimestamp > 0 && finishTimestamp > 0, "Invalid timestamps");
+
+        _positions[_nextId] = LockedPosition({
+            owner: from,
+            positionManager: msg.sender,
+            underlyingTokenId: tokenId,
+            initialLiquidity: liquidity,
+            startUnlockingTimestamp: startTimestamp,
+            finishUnlockingTimestamp: finishTimestamp
+        });
+        _nextId++;
 
         return this.onERC721Received.selector;
     }
