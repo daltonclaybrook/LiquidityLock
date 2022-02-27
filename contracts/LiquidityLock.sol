@@ -175,6 +175,9 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
             /* uint128 tokensOwed1 */
         ) = manager.positions(tokenId);
 
+        require(liquidity > 0, "Not enough liquidity to lock");
+        require(token0 != address(0) && token1 != address(0), "Invalid token address");
+
         // The `data` parameter is expected to contain the start and finish timestamps
         (uint256 startTimestamp, uint256 finishTimestamp) = abi.decode(data, (uint256, uint256));
         
