@@ -50,13 +50,34 @@ contract("LiquidityLock", (accounts) => {
         it("successfully creates a mock position", async () => {
             const manager = await PositionManager.deployed();
             const owner = await manager.ownerOf(1); // token ID 1
+            const positions = await manager.positions(1);
             assert.equal(owner, accounts[0]);
+            // 7th tuple field is `liquidity`
+            assert.equal(positions[7].toString(), "1000000");
         });
     });
 
     describe("token transfer", () => {
         it("fails if data field is empty", async () => {
             const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            await truffleAssert.fails(
+                manager.safeTransferFrom(accounts[0], lock.address, 1, ""),
+                truffleAssert.ErrorType.INVALID_ARGUMENT
+            )
+        });
+
+        it("fails if timestamps are in the past", async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            const encodedTimestamps = web3.eth.abi.encodeParameters(
+                ['uint256', 'uint256'],
+                [1577836800, 1580515200] // 1/1/2020 -> 2/1/2020
+            );
+
+            await truffleAssert.reverts(
+                manager.safeTransferFrom(accounts[0], lock.address, 1, encodedTimestamps)
+            )
         });
     });
 });
