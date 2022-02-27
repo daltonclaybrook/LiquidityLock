@@ -2,6 +2,7 @@ const LiquidityLock = artifacts.require("LiquidityLock");
 const PositionManager = artifacts.require("MockNonfungiblePositionManager");
 const MockToken = artifacts.require("MockToken");
 const BN = web3.utils.BN;
+const truffleAssert = require('truffle-assertions');
 
 contract("LiquidityLock", (accounts) => {
     it("has correct name and symbol", async () => {
@@ -44,6 +45,18 @@ contract("LiquidityLock", (accounts) => {
             const balance1 = await token1.balanceOf(manager.address);
             assert.equal(balance0.toString(), "1000000");
             assert.equal(balance1.toString(), "1000000");
+        });
+
+        it("successfully creates a mock position", async () => {
+            const manager = await PositionManager.deployed();
+            const owner = await manager.ownerOf(1); // token ID 1
+            assert.equal(owner, accounts[0]);
+        });
+    });
+
+    describe("token transfer", () => {
+        it("fails if data field is empty", async () => {
+            const manager = await PositionManager.deployed();
         });
     });
 });

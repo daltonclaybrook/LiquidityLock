@@ -14,7 +14,6 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
     mapping(uint256 => Position) private _positions;
 
     struct Position {
-        address owner;
         uint128 liquidity;
     }
 
@@ -40,11 +39,11 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
         uint128 tokensOwed0,
         uint128 tokensOwed1
     ) {
+        require(_exists(tokenId), "No existing position");
         Position storage position = _positions[tokenId];
-        require(position.owner != address(0), "No existing position");
 
         nonce = 0; // unused
-        operator = position.owner;
+        operator = ERC721.ownerOf(tokenId);
         _token0 = address(token0);
         _token1 = address(token1);
         fee = 3000; // unused
@@ -58,15 +57,17 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
     }
 
     function decreaseLiquidity(DecreaseLiquidityParams calldata params) external payable returns (uint256 amount0, uint256 amount1) {
+        require(_exists(params.tokenId), "No existing position");
         Position storage position = _positions[params.tokenId];
-        require(position.owner != address(0), "No existing position");
         require(params.liquidity <= position.liquidity, "Not enough liquidity available");
+        require(params.liquidity > 0, "Invalid liquidity param");
 
         (uint256 balance0, uint256 balance1) = tokenBalances();
         require(balance0 >= params.liquidity && balance1 >= params.liquidity, "Balance too low");
 
-        transferToken(token0, position.owner, params.liquidity);
-        transferToken(token1, position.owner, params.liquidity);
+        address owner = ERC721.ownerOf(params.tokenId);
+        transferToken(token0, owner, params.liquidity);
+        transferToken(token1, owner, params.liquidity);
         position.liquidity -= params.liquidity;
 
         return (params.liquidity, params.liquidity);
@@ -76,8 +77,8 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
     /// to this contract. Calling this function will transfer any extra tokens received after the position was created.
     /// If no extra tokens exist, this call will revert.
     function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1) {
+        require(_exists(params.tokenId), "No existing position");
         Position storage position = _positions[params.tokenId];
-        require(position.owner != address(0), "No existing position");
         
         (uint256 balance0, uint256 balance1) = tokenBalances();
         // At least one of the tokens in the position must have a balance higher than the liquidity
@@ -85,10 +86,11 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
 
         // Transfer any tokens that are higher than the liquidity in the position meaning that they have been received
         // after the position was created, simulating a fee.
+        address owner = ERC721.ownerOf(params.tokenId);
         amount0 = balance0 - position.liquidity;
         amount1 = balance1 - position.liquidity;
-        transferToken(token0, position.owner, amount0);
-        transferToken(token1, position.owner, amount1);
+        transferToken(token0, owner, amount0);
+        transferToken(token1, owner, amount1);
     }
 
     // MARK: - Mock helper functions
@@ -97,8 +99,8 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
         (uint256 balance0, uint256 balance1) = tokenBalances();
         require (balance0 == balance1 && balance0 > 0, "Incorrect balances to make position");
 
+        _mint(msg.sender, _nextId);
         _positions[_nextId] = Position({
-            owner: msg.sender,
             liquidity: uint128(balance0)
         });
         _nextId++;
