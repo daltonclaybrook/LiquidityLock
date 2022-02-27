@@ -21,8 +21,6 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
 
     /// Details about the liquidity position that are locked in this contract
     struct LockedPosition {
-        /// @dev The address of the owner of this position
-        address owner;
         /// @dev The address of the Uniswap V3 position manager contract that controls the liquidity
         address positionManager;
         /// @dev The token id of the position in the position manager contract
@@ -53,8 +51,8 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
     /// @dev If you have the Uniswap token ID but not the lock token ID, you can call `getLockTokenId`,
     /// and pass the Uniswap token ID to receive the lock token ID.
     function collect(uint256 tokenId, address recipient, uint128 amount0Max, uint128 amount1Max) external {
+        require(ERC721.ownerOf(tokenId) == msg.sender, "Not authorized");
         LockedPosition storage position = _positions[tokenId];
-        require(position.owner == msg.sender, "Not authorized");
 
         INonfungiblePositionManager manager = INonfungiblePositionManager(position.positionManager);
         INonfungiblePositionManager.CollectParams memory params = INonfungiblePositionManager.CollectParams({
@@ -82,8 +80,8 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
 
     /// @notice Returns the total amount of liquidity available to be withdrawn at this time
     function availableLiquidity(uint256 tokenId) public view returns (uint128) {
+        require(_exists(tokenId), "Invalid token ID");
         LockedPosition storage position = _positions[tokenId];
-        require(position.uniswapTokenId != 0, "Invalid token ID");
         
         uint256 timestamp = block.timestamp;
         if (position.startUnlockingTimestamp > timestamp) {
@@ -111,8 +109,8 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         uint256 amount1Min,
         uint256 deadline
     ) external {
+        require(ERC721.ownerOf(tokenId) == msg.sender, "Not authorized");
         LockedPosition storage position = _positions[tokenId];
-        require(position.owner == msg.sender, "Not authorized");
 
         uint128 available = availableLiquidity(tokenId);
         require(liquidity <= available, "Liquidity unavailable");
@@ -131,25 +129,26 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         IERC20 token0Contract = IERC20(position.token0);
         IERC20 token1Contract = IERC20(position.token1);
 
-        token0Contract.transfer(position.owner, amount0);
-        token1Contract.transfer(position.owner, amount1);
+        token0Contract.transfer(msg.sender, amount0);
+        token1Contract.transfer(msg.sender, amount1);
     }
 
     /// @notice Returns the locked Uniswap token to the original owner and deletes the lock token
     /// @dev This can only be done if the current timestamp is greater than the finish timestamp
     /// of the locked position.
     function returnUniswapToken(uint256 tokenId) external {
+        require(ERC721.ownerOf(tokenId) == msg.sender, "Not authorized");
         LockedPosition storage position = _positions[tokenId];
-        require(position.owner == msg.sender, "Not authorized");
 
         uint256 timestamp = block.timestamp;
         require(timestamp >= position.finishUnlockingTimestamp, "Not completely unlocked");
 
         IERC721 manager = IERC721(position.positionManager);
-        manager.safeTransferFrom(address(this), position.owner, position.uniswapTokenId);
+        manager.safeTransferFrom(address(this), msg.sender, position.uniswapTokenId);
 
         delete _uniswapTokenIdsToLock[position.uniswapTokenId];
         delete _positions[tokenId];
+        _burn(tokenId);
     }
 
     // MARK: - IERC721Receiver
@@ -184,8 +183,9 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         uint256 timestamp = block.timestamp;
         require(startTimestamp >= timestamp && finishTimestamp > startTimestamp, "Invalid timestamps");
 
+        // Mint an NFT representing this locked position with `from` as the owner
+        _mint(from, _nextId);
         _positions[_nextId] = LockedPosition({
-            owner: from,
             positionManager: msg.sender,
             uniswapTokenId: tokenId,
             token0: token0,
