@@ -27,7 +27,7 @@ contract("LiquidityLock", (accounts) => {
         assert.equal(symbol, "UV3LL");
     });
 
-    describe("mock setup", () => {
+    contract("mock setup", (accounts) => {
         it("has deployed mock contract", async () => {
             const manager = await PositionManager.deployed();
             const name = await manager.name();
@@ -70,12 +70,13 @@ contract("LiquidityLock", (accounts) => {
         });
     });
 
-    describe("token transfer", () => {
+    contract("token transfer", (accounts) => {
         it("fails if data field is empty", async () => {
             const manager = await PositionManager.deployed();
             const lock = await LiquidityLock.deployed();
-            await expectRevert.unspecified(
-                manager.safeTransferFrom(accounts[0], lock.address, 1, "0x")
+            await expectRevert(
+                manager.safeTransferFrom(accounts[0], lock.address, 1, "0x"),
+                'Invalid data field. Must contain two timestamps.'
             )
         });
 
@@ -87,8 +88,9 @@ contract("LiquidityLock", (accounts) => {
                 [1577836800, 1580515200] // 1/1/2020 -> 2/1/2020
             );
 
-            await expectRevert.unspecified(
-                manager.safeTransferFrom(accounts[0], lock.address, 1, encodedTimestamps)
+            await expectRevert(
+                manager.safeTransferFrom(accounts[0], lock.address, 1, encodedTimestamps),
+                'Invalid timestamps'
             )
         });
 
@@ -116,7 +118,13 @@ contract("LiquidityLock", (accounts) => {
         });
     });
 
-    describe("available liquidity", () => {
+    contract("available liquidity", (accounts) => {
+        before(async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            await transferInitialToken.bind(this)(manager, lock, accounts);
+        });
+
         it("reverts if token does not exist", async () => {
             const manager = await PositionManager.new('1000000');
             const lock = await LiquidityLock.new();
@@ -156,6 +164,38 @@ contract("LiquidityLock", (accounts) => {
             await advanceTimeByPercentOfStart.bind(this)(1.5);
             const liquidity = await lock.availableLiquidity(1);
             assert.equal(liquidity.toString(), "1000000");
+        });
+    });
+
+    contract("collect liquidity", (accounts) => {
+        before(async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            await transferInitialToken.bind(this)(manager, lock, accounts);
+        });
+
+        it("fails if you don't own the token ID", async () => {
+            const lock = await LiquidityLock.deployed();
+            const max = new BN("1000000000"); // 1B
+            await expectRevert(
+                lock.collect(1, accounts[1], max, max, { from: accounts[1] }),
+                'Not authorized'
+            )
+        });
+
+        it("calls mock collect and returns surplus tokens", async () => {
+            const lock = await LiquidityLock.deployed();
+            const manager = await PositionManager.deployed();
+            const token0 = await MockToken.at(await manager.token0());
+            // mint 300 tokens to the manager to use as the fee
+            await token0.mockMint(manager.address, 300);
+            
+            const max = new BN("1000000000"); // 1B
+            const preBalance = await token0.balanceOf(accounts[0]);
+            await lock.collect(1, accounts[0], max, max);
+            const postBalance = await token0.balanceOf(accounts[0]);
+
+            assert.equal(postBalance.sub(preBalance).toString(), "300");
         });
     });
 });

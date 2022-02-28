@@ -14,6 +14,7 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
     mapping(uint256 => Position) private _positions;
 
     struct Position {
+        address originalOwner;
         uint128 liquidity;
     }
 
@@ -65,9 +66,8 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
         (uint256 balance0, uint256 balance1) = tokenBalances();
         require(balance0 >= params.liquidity && balance1 >= params.liquidity, "Balance too low");
 
-        address owner = ERC721.ownerOf(params.tokenId);
-        transferToken(token0, owner, params.liquidity);
-        transferToken(token1, owner, params.liquidity);
+        transferToken(token0, position.originalOwner, params.liquidity);
+        transferToken(token1, position.originalOwner, params.liquidity);
         position.liquidity -= params.liquidity;
 
         return (params.liquidity, params.liquidity);
@@ -86,11 +86,10 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
 
         // Transfer any tokens that are higher than the liquidity in the position meaning that they have been received
         // after the position was created, simulating a fee.
-        address owner = ERC721.ownerOf(params.tokenId);
         amount0 = balance0 - position.liquidity;
         amount1 = balance1 - position.liquidity;
-        transferToken(token0, owner, amount0);
-        transferToken(token1, owner, amount1);
+        transferToken(token0, position.originalOwner, amount0);
+        transferToken(token1, position.originalOwner, amount1);
     }
 
     // MARK: - Mock helper functions
@@ -101,6 +100,7 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
 
         _mint(msg.sender, _nextId);
         _positions[_nextId] = Position({
+            originalOwner: msg.sender,
             liquidity: uint128(balance0)
         });
         _nextId++;
