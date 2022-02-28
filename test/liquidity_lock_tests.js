@@ -1,8 +1,13 @@
 const LiquidityLock = artifacts.require("LiquidityLock");
 const PositionManager = artifacts.require("MockNonfungiblePositionManager");
 const MockToken = artifacts.require("MockToken");
-const BN = web3.utils.BN;
-const truffleAssert = require('truffle-assertions');
+
+const {
+    BN,           // Big Number support
+    constants,    // Common constants, like the zero address and largest integers
+    expectEvent,  // Assertions for emitted events
+    expectRevert, // Assertions for transactions that should fail
+} = require('@openzeppelin/test-helpers');
 
 contract("LiquidityLock", (accounts) => {
     it("has correct name and symbol", async () => {
@@ -61,9 +66,8 @@ contract("LiquidityLock", (accounts) => {
         it("fails if data field is empty", async () => {
             const manager = await PositionManager.deployed();
             const lock = await LiquidityLock.deployed();
-            await truffleAssert.fails(
-                manager.safeTransferFrom(accounts[0], lock.address, 1, ""),
-                truffleAssert.ErrorType.INVALID_ARGUMENT
+            await expectRevert.unspecified(
+                manager.safeTransferFrom(accounts[0], lock.address, 1, "0x")
             )
         });
 
@@ -75,9 +79,61 @@ contract("LiquidityLock", (accounts) => {
                 [1577836800, 1580515200] // 1/1/2020 -> 2/1/2020
             );
 
-            await truffleAssert.reverts(
+            await expectRevert.unspecified(
                 manager.safeTransferFrom(accounts[0], lock.address, 1, encodedTimestamps)
             )
         });
+
+        it("accepts the transfer on valid params", async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            const receipt = await transferInitialToken(manager, lock, accounts);
+            // transfer uniswap token from account 0 to lock
+            expectEvent(receipt, 'Transfer', {
+                from: accounts[0],
+                to: lock.address,
+                tokenId: new BN(1)
+            });
+            // mint new lock token and give to account 0
+            expectEvent(receipt, 'Transfer', {
+                from: "0x0000000000000000000000000000000000000000",
+                to: accounts[0],
+                tokenId: new BN(1)
+            });
+
+            const uniTokenOwner = await manager.ownerOf(1); // token ID 1
+            const lockTokenOwner = await lock.ownerOf(1); // token ID 1
+            assert.equal(uniTokenOwner, lock.address);
+            assert.equal(lockTokenOwner, accounts[0]);
+        });
+    });
+
+    describe("available liquidity", () => {
+        it("reverts if token does not exist", async () => {
+            const manager = await PositionManager.new('1000000');
+            const lock = await LiquidityLock.new();
+            await expectRevert(
+                lock.availableLiquidity(1),
+                'Invalid token ID'
+            )
+        });
+
+        it("returns zero initially", async () => {
+            const manager = await PositionManager.new('1000000');
+            const lock = await LiquidityLock.new();
+            await transferInitialToken(manager, lock, accounts);
+            const liquidity = await lock.availableLiquidity(1);
+            assert.equal(liquidity, 0);
+        });
     });
 });
+
+// Helper functions
+
+async function transferInitialToken(manager, lock, accounts) {
+    const encodedTimestamps = web3.eth.abi.encodeParameters(
+        ['uint256', 'uint256'],
+        [4102444800, 4118083200] // 1/1/2100 -> 7/1/2100
+    );
+    return await manager.safeTransferFrom(accounts[0], lock.address, 1, encodedTimestamps);
+}
