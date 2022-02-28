@@ -7,9 +7,17 @@ const {
     constants,    // Common constants, like the zero address and largest integers
     expectEvent,  // Assertions for emitted events
     expectRevert, // Assertions for transactions that should fail
+    time
 } = require('@openzeppelin/test-helpers');
 
 contract("LiquidityLock", (accounts) => {
+    before(async () => {
+        const latest = parseInt(await time.latest());
+        const tenDays = 864000;
+        this.startTime = latest + tenDays;
+        this.endTime = this.startTime + tenDays;
+    });
+
     it("has correct name and symbol", async () => {
         const lock = await LiquidityLock.deployed();
 
@@ -87,7 +95,7 @@ contract("LiquidityLock", (accounts) => {
         it("accepts the transfer on valid params", async () => {
             const manager = await PositionManager.deployed();
             const lock = await LiquidityLock.deployed();
-            const receipt = await transferInitialToken(manager, lock, accounts);
+            const receipt = await transferInitialToken.bind(this)(manager, lock, accounts);
             // transfer uniswap token from account 0 to lock
             expectEvent(receipt, 'Transfer', {
                 from: accounts[0],
@@ -119,21 +127,50 @@ contract("LiquidityLock", (accounts) => {
         });
 
         it("returns zero initially", async () => {
-            const manager = await PositionManager.new('1000000');
-            const lock = await LiquidityLock.new();
-            await transferInitialToken(manager, lock, accounts);
+            const lock = await LiquidityLock.deployed();
             const liquidity = await lock.availableLiquidity(1);
-            assert.equal(liquidity, 0);
+            assert.equal(liquidity.toString(), "0");
+        });
+
+        it("returns one quarter liquidity after one quarter of time has passed", async () => {
+            const lock = await LiquidityLock.deployed();
+            // 1/4 between the two dates
+            await advanceTimeByPercentOfStart.bind(this)(0.25);
+            const liquidity = await lock.availableLiquidity(1);
+            assert.equal(liquidity.toString(), "250000");
+        });
+
+        it("returns 90% liquidity after 90% of time has passed", async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            // 90% between the two dates
+            await advanceTimeByPercentOfStart.bind(this)(0.9);
+            const liquidity = await lock.availableLiquidity(1);
+            assert.equal(liquidity.toString(), "900000");
+        });
+
+        it("returns 100% liquidity after 150% of time has passed", async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            // 150% between the two dates
+            await advanceTimeByPercentOfStart.bind(this)(1.5);
+            const liquidity = await lock.availableLiquidity(1);
+            assert.equal(liquidity.toString(), "1000000");
         });
     });
 });
 
 // Helper functions
 
+async function advanceTimeByPercentOfStart(percent) {
+    const toAdvance = (this.endTime - this.startTime) * percent + this.startTime;
+    await time.increaseTo(Math.floor(toAdvance));
+}
+
 async function transferInitialToken(manager, lock, accounts) {
     const encodedTimestamps = web3.eth.abi.encodeParameters(
         ['uint256', 'uint256'],
-        [4102444800, 4118083200] // 1/1/2100 -> 7/1/2100
+        [this.startTime, this.endTime]
     );
     return await manager.safeTransferFrom(accounts[0], lock.address, 1, encodedTimestamps);
 }
