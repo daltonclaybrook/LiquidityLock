@@ -110,7 +110,7 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
     /// @notice Decrease the liquidity of the position by the provided amount
     /// @dev The provided `liquidity` value must be less than or equal to the total available liquidity, which
     /// can be obtained by calling `availableLiquidity`.
-    function descreaseLiquidity(
+    function decreaseLiquidity(
         uint256 tokenId,
         uint128 liquidity,
         uint256 amount0Min,

@@ -16,6 +16,7 @@ contract("LiquidityLock", (accounts) => {
         const tenDays = 864000;
         this.startTime = latest + tenDays;
         this.endTime = this.startTime + tenDays;
+        this.deadline = 4102444800; // 1/1/2100
     });
 
     it("has correct name and symbol", async () => {
@@ -292,6 +293,61 @@ contract("LiquidityLock", (accounts) => {
             const currentOwner = await manager.ownerOf(123);
             assert.equal(previousOwner, lock.address);
             assert.equal(currentOwner, accounts[0]);
+        });
+    });
+
+    contract("decrease liquidity", (accounts) => {
+        before(async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            await transferInitialToken.bind(this)(manager, lock, accounts);
+        });
+
+        it("fails if account does not own the token", async () => {
+            const lock = await LiquidityLock.deployed();
+            const max = new BN("1000000000"); // 1B
+            await expectRevert(
+                lock.decreaseLiquidity(1, 100, max, max, this.deadline, { from: accounts[1] }),
+                'Not authorized'
+            );
+        });
+
+        it("fails if the request amount of liquidity is unavailable", async () => {
+            const lock = await LiquidityLock.deployed();
+            const max = new BN("1000000000"); // 1B
+
+            await advanceTimeByPercentOfStart.bind(this)(0.5);
+            const toDecrease = new BN("500010"); // barely over available
+            await expectRevert(
+                lock.decreaseLiquidity(1, toDecrease, max, max, this.deadline),
+                'Liquidity unavailable'
+            );
+        });
+
+        // todo: this functionality might be wrong
+        it("returns the correct amounts of tokens", async () => {
+            const lock = await LiquidityLock.deployed();
+            const manager = await PositionManager.deployed();
+            const token0 = await MockToken.at(await manager.token0());
+            const token1 = await MockToken.at(await manager.token1());
+            const max = new BN("1000000000"); // 1B
+            
+            await advanceTimeByPercentOfStart.bind(this)(0.5);
+            
+            const token0InitialBalance = await token0.balanceOf(accounts[0]);
+            const token1InitialBalance = await token1.balanceOf(accounts[0]);
+            await lock.decreaseLiquidity(1, 925, max, max, this.deadline);
+            const token0CurrentBalance = await token0.balanceOf(accounts[0]);
+            const token1CurrentBalance = await token1.balanceOf(accounts[0]);
+
+            assert.equal(token0InitialBalance.toString(), "0");
+            assert.equal(token1InitialBalance.toString(), "0");
+            assert.equal(token0CurrentBalance.toString(), "925");
+            assert.equal(token1CurrentBalance.toString(), "925");
+        });
+
+        it("available liquidity is decreased after a successful withdrawal", async () => {
+            // todo: implement
         });
     });
 });

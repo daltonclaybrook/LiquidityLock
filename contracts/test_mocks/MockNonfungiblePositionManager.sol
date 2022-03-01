@@ -66,8 +66,8 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
         (uint256 balance0, uint256 balance1) = tokenBalances();
         require(balance0 >= params.liquidity && balance1 >= params.liquidity, "Balance too low");
 
-        transferToken(token0, position.originalOwner, params.liquidity);
-        transferToken(token1, position.originalOwner, params.liquidity);
+        transferToken(token0, msg.sender, params.liquidity);
+        transferToken(token1, msg.sender, params.liquidity);
         position.liquidity -= params.liquidity;
 
         return (params.liquidity, params.liquidity);
@@ -88,8 +88,8 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
         // after the position was created, simulating a fee.
         amount0 = balance0 - position.liquidity;
         amount1 = balance1 - position.liquidity;
-        transferToken(token0, position.originalOwner, amount0);
-        transferToken(token1, position.originalOwner, amount1);
+        transferToken(token0, params.recipient, amount0);
+        transferToken(token1, params.recipient, amount1);
     }
 
     // MARK: - Mock helper functions
