@@ -234,6 +234,15 @@ contract("LiquidityLock", (accounts) => {
             );
         });
 
+    });
+
+    contract("owner of uniswap", (accounts) => {
+        before(async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            await transferInitialToken.bind(this)(manager, lock, accounts);
+        });
+
         it("returns correct owner of uniswap token", async () => {
             const lock = await LiquidityLock.deployed();
             const owner = await lock.ownerOfUniswap(123);
@@ -246,6 +255,43 @@ contract("LiquidityLock", (accounts) => {
                 lock.ownerOfUniswap(124),
                 'No lock token'
             );
+        });
+    });
+
+    contract("return uniswap token", (accounts) => {
+        before(async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            await transferInitialToken.bind(this)(manager, lock, accounts);
+        });
+
+        it("fails if caller is not authorized", async () => {
+            const lock = await LiquidityLock.deployed();
+            await expectRevert(
+                lock.returnUniswapToken(1, { from: accounts[1] }),
+                'Not authorized'
+            );
+        });
+
+        it("fails if lock end time is in the future", async () => {
+            const lock = await LiquidityLock.deployed();
+            await advanceTimeByPercentOfStart.bind(this)(0.75);
+            await expectRevert(
+                lock.returnUniswapToken(1),
+                'Not completely unlocked'
+            );
+        });
+
+        it("returns token successfully if end time is in the past", async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            await advanceTimeByPercentOfStart.bind(this)(1.25);
+
+            const previousOwner = await manager.ownerOf(123);
+            await lock.returnUniswapToken(1);
+            const currentOwner = await manager.ownerOf(123);
+            assert.equal(previousOwner, lock.address);
+            assert.equal(currentOwner, accounts[0]);
         });
     });
 });
