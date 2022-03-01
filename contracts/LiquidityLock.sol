@@ -66,16 +66,24 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
 
     /// @notice Returns the original owner of the provided Uniswap token ID that is currently locked
     /// by this contract
-    function ownerOfUniswap(uint256 uniswapTokenId) external view returns (address owner) {
-        uint256 lockTokenId = _uniswapTokenIdsToLock[uniswapTokenId];
-        require(lockTokenId != 0, "No lock token");
-        return ownerOf(lockTokenId);
+    function ownerOfUniswap(uint256 _uniswapTokenId) external view returns (address owner) {
+        uint256 _lockTokenId = _uniswapTokenIdsToLock[_uniswapTokenId];
+        require(_lockTokenId != 0, "No lock token");
+        return ownerOf(_lockTokenId);
     }
 
     /// @notice Returns the token ID of the locked position token that wraps the provided uniswap token
-    function getLockTokenId(uint256 uniswapTokenId) external view returns (uint256 lockTokenId) {
-        lockTokenId = _uniswapTokenIdsToLock[uniswapTokenId];
-        require(lockTokenId != 0, "No lock token");
+    function lockTokenId(uint256 _uniswapTokenId) external view returns (uint256 _lockTokenId) {
+        _lockTokenId = _uniswapTokenIdsToLock[_uniswapTokenId];
+        require(_lockTokenId != 0, "No lock token");
+    }
+
+    /// @notice Returns the token ID of the Uniswap token that is locked and represented by the provided
+    /// lock token ID
+    function uniswapTokenId(uint256 _lockTokenId) external view returns (uint256 _uniswapTokenId) {
+        require(_exists(_lockTokenId), "Invalid token ID");
+        LockedPosition storage position = _positions[_lockTokenId];
+        _uniswapTokenId = position.uniswapTokenId;
     }
 
     /// @notice Returns the total amount of liquidity available to be withdrawn at this time

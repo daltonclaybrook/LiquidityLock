@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
-    uint256 private _nextId = 1;
+    uint256 private _nextId = 123;
     MockToken public token0;
     MockToken public token1;
     

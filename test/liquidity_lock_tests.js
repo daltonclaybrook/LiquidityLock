@@ -62,8 +62,8 @@ contract("LiquidityLock", (accounts) => {
 
         it("successfully creates a mock position", async () => {
             const manager = await PositionManager.deployed();
-            const owner = await manager.ownerOf(1); // token ID 1
-            const positions = await manager.positions(1);
+            const owner = await manager.ownerOf(123); // token ID 1
+            const positions = await manager.positions(123);
             assert.equal(owner, accounts[0]);
             // 7th tuple field is `liquidity`
             assert.equal(positions[7].toString(), "1000000");
@@ -75,7 +75,7 @@ contract("LiquidityLock", (accounts) => {
             const manager = await PositionManager.deployed();
             const lock = await LiquidityLock.deployed();
             await expectRevert(
-                manager.safeTransferFrom(accounts[0], lock.address, 1, "0x"),
+                manager.safeTransferFrom(accounts[0], lock.address, 123, "0x"),
                 'Invalid data field. Must contain two timestamps.'
             )
         });
@@ -89,7 +89,7 @@ contract("LiquidityLock", (accounts) => {
             );
 
             await expectRevert(
-                manager.safeTransferFrom(accounts[0], lock.address, 1, encodedTimestamps),
+                manager.safeTransferFrom(accounts[0], lock.address, 123, encodedTimestamps),
                 'Invalid timestamps'
             )
         });
@@ -102,7 +102,7 @@ contract("LiquidityLock", (accounts) => {
             expectEvent(receipt, 'Transfer', {
                 from: accounts[0],
                 to: lock.address,
-                tokenId: new BN(1)
+                tokenId: new BN(123)
             });
             // mint new lock token and give to account 0
             expectEvent(receipt, 'Transfer', {
@@ -111,7 +111,7 @@ contract("LiquidityLock", (accounts) => {
                 tokenId: new BN(1)
             });
 
-            const uniTokenOwner = await manager.ownerOf(1); // token ID 1
+            const uniTokenOwner = await manager.ownerOf(123); // token ID 123
             const lockTokenOwner = await lock.ownerOf(1); // token ID 1
             assert.equal(uniTokenOwner, lock.address);
             assert.equal(lockTokenOwner, accounts[0]);
@@ -198,6 +198,56 @@ contract("LiquidityLock", (accounts) => {
             assert.equal(postBalance.sub(preBalance).toString(), "300");
         });
     });
+
+    contract("token ID conversion functions", (accounts) => {
+        before(async () => {
+            const manager = await PositionManager.deployed();
+            const lock = await LiquidityLock.deployed();
+            await transferInitialToken.bind(this)(manager, lock, accounts);
+        });
+
+        it("returns correct lock token ID for uniswap token ID", async () => {
+            const lock = await LiquidityLock.deployed();
+            const lockTokenId = await lock.lockTokenId(123);
+            assert.equal(lockTokenId.toString(), "1");
+        });
+
+        it("errors on invalid uniswap token ID", async () => {
+            const lock = await LiquidityLock.deployed();
+            await expectRevert(
+                lock.lockTokenId(124),
+                'No lock token'
+            );
+        });
+
+        it("returns correct uniswap token ID for lock token ID", async () => {
+            const lock = await LiquidityLock.deployed();
+            const uniswapTokenId = await lock.uniswapTokenId(1);
+            assert.equal(uniswapTokenId.toString(), "123");
+        });
+
+        it("errors on invalid lock token ID", async () => {
+            const lock = await LiquidityLock.deployed();
+            await expectRevert(
+                lock.uniswapTokenId(2),
+                'Invalid token ID'
+            );
+        });
+
+        it("returns correct owner of uniswap token", async () => {
+            const lock = await LiquidityLock.deployed();
+            const owner = await lock.ownerOfUniswap(123);
+            assert.equal(owner, accounts[0]);
+        });
+
+        it("owner of uniswap fails if not lock token", async () => {
+            const lock = await LiquidityLock.deployed();
+            await expectRevert(
+                lock.ownerOfUniswap(124),
+                'No lock token'
+            );
+        });
+    });
 });
 
 // Helper functions
@@ -212,5 +262,5 @@ async function transferInitialToken(manager, lock, accounts) {
         ['uint256', 'uint256'],
         [this.startTime, this.endTime]
     );
-    return await manager.safeTransferFrom(accounts[0], lock.address, 1, encodedTimestamps);
+    return await manager.safeTransferFrom(accounts[0], lock.address, 123, encodedTimestamps);
 }
