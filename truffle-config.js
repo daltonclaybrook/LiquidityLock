@@ -18,10 +18,11 @@
  *
  */
 
-// const HDWalletProvider = require('@truffle/hdwallet-provider');
-//
 // const fs = require('fs');
 // const mnemonic = fs.readFileSync(".secret").toString().trim();
+
+require("dotenv").config();
+const HDWalletProvider = require("@truffle/hdwallet-provider");
 
 module.exports = {
     /**
@@ -46,6 +47,16 @@ module.exports = {
             port: 8545,            // Standard Ethereum port (default: none)
             network_id: "*",       // Any network (default: none)
         },
+
+        rinkeby: {
+            provider: () =>
+                new HDWalletProvider({
+                    privateKeys: [process.env.RINKEBY_PRIVATE_KEY],
+                    providerOrUrl: process.env.RINKEBY_URL,
+                }),
+            network_id: "4", // Rinkeby network ID
+        },
+
         // Another network with more advanced options...
         // advanced: {
         // port: 8777,             // Custom port
@@ -91,6 +102,12 @@ module.exports = {
                 },
             },
         },
+    },
+
+    plugins: ["truffle-plugin-verify"],
+
+    api_keys: {
+        etherscan: process.env.ETHERSCAN_TOKEN,
     },
 
     // Truffle DB is currently disabled by default; to enable it, change enabled:
