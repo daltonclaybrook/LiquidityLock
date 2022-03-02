@@ -168,7 +168,7 @@ contract("LiquidityLock", (accounts) => {
         });
     });
 
-    contract("collect liquidity", (accounts) => {
+    contract("collect tokens and withdraw", (accounts) => {
         before(async () => {
             const manager = await PositionManager.deployed();
             const lock = await LiquidityLock.deployed();
@@ -179,7 +179,7 @@ contract("LiquidityLock", (accounts) => {
             const lock = await LiquidityLock.deployed();
             const max = new BN("1000000000"); // 1B
             await expectRevert(
-                lock.collect(1, accounts[1], max, max, { from: accounts[1] }),
+                lock.collectAndWithdrawTokens(1, accounts[1], max, max, { from: accounts[1] }),
                 'Not authorized'
             )
         });
@@ -193,7 +193,7 @@ contract("LiquidityLock", (accounts) => {
             
             const max = new BN("1000000000"); // 1B
             const preBalance = await token0.balanceOf(accounts[0]);
-            await lock.collect(1, accounts[0], max, max);
+            await lock.collectAndWithdrawTokens(1, accounts[0], max, max);
             const postBalance = await token0.balanceOf(accounts[0]);
 
             assert.equal(postBalance.sub(preBalance).toString(), "300");
@@ -296,7 +296,7 @@ contract("LiquidityLock", (accounts) => {
         });
     });
 
-    contract("decrease liquidity", (accounts) => {
+    contract("withdraw liquidity", (accounts) => {
         before(async () => {
             const manager = await PositionManager.deployed();
             const lock = await LiquidityLock.deployed();
@@ -307,7 +307,7 @@ contract("LiquidityLock", (accounts) => {
             const lock = await LiquidityLock.deployed();
             const max = new BN("1000000000"); // 1B
             await expectRevert(
-                lock.decreaseLiquidity(1, 100, max, max, this.deadline, { from: accounts[1] }),
+                lock.withdrawLiquidity(1, accounts[1], 100, max, max, this.deadline, { from: accounts[1] }),
                 'Not authorized'
             );
         });
@@ -319,7 +319,7 @@ contract("LiquidityLock", (accounts) => {
             await advanceTimeByPercentOfStart.bind(this)(0.5);
             const toDecrease = new BN("500010"); // barely over available
             await expectRevert(
-                lock.decreaseLiquidity(1, toDecrease, max, max, this.deadline),
+                lock.withdrawLiquidity(1, accounts[0], toDecrease, max, max, this.deadline),
                 'Liquidity unavailable'
             );
         });
@@ -336,7 +336,7 @@ contract("LiquidityLock", (accounts) => {
             
             const token0InitialBalance = await token0.balanceOf(accounts[0]);
             const token1InitialBalance = await token1.balanceOf(accounts[0]);
-            await lock.decreaseLiquidity(1, 925, max, max, this.deadline);
+            await lock.withdrawLiquidity(1, accounts[0], 925, max, max, this.deadline);
             const token0CurrentBalance = await token0.balanceOf(accounts[0]);
             const token1CurrentBalance = await token1.balanceOf(accounts[0]);
 

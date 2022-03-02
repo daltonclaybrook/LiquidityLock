@@ -2,12 +2,15 @@
 pragma solidity ^0.8.12;
 
 import "../third_party/INonfungiblePositionManager.sol";
+import "../third_party/IPeripheryPayments.sol";
+import "../third_party/IPeripheryImmutableState.sol";
 import "./MockToken.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
-contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
+contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, IPeripheryPayments, IPeripheryImmutableState {
     uint256 private _nextId = 123;
+    // token0 is mocking the WETH address
     MockToken public token0;
     MockToken public token1;
     
@@ -23,6 +26,9 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
         token1 = new MockToken("Mock Token 1", "MT1", mintTokens);
         createMockPosition();
     }
+
+    /// @dev Enables the contract to receive ETH for later unwrapping
+    receive() external payable {}
 
     // MARK - INonfungiblePositionManager
 
@@ -90,6 +96,29 @@ contract MockNonfungiblePositionManager is INonfungiblePositionManager, ERC721 {
         amount1 = balance1 - position.liquidity;
         transferToken(token0, params.recipient, amount0);
         transferToken(token1, params.recipient, amount1);
+    }
+
+    // MARK: - IPeripheryPayments
+
+    /// @notice Unwraps the contract's WETH9 balance and sends it to recipient as ETH.
+    function unwrapWETH9(uint256 amountMinimum, address recipient) external payable {
+        // todo: implement
+    }
+
+    /// @notice Transfers the full amount of a token held by this contract to recipient
+    function sweepToken(
+        address token,
+        uint256 amountMinimum,
+        address recipient
+    ) external payable {
+        // todo: implement
+    }
+
+    // MARK: - IPeripheryImmutableState
+
+    /// @return Returns the address of WETH9
+    function WETH9() external view returns (address) {
+        return address(token0);
     }
 
     // MARK: - Mock helper functions
