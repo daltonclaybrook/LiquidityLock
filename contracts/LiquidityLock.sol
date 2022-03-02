@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.12;
 
-import "./INonfungiblePositionManager.sol";
+import "./third_party/INonfungiblePositionManager.sol";
+import "./third_party/IPeripheryImmutableState.sol";
+import "./third_party/IPeripheryPayments.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -107,14 +109,20 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         return uint128(unlockedLiquidity - position.decreasedLiquidity);
     }
 
-    /// @notice Decrease the liquidity of the position by the provided amount
-    /// @dev The provided `liquidity` value must be less than or equal to the total available liquidity, which
+    /// @notice This function allows you to decrease your liquidity position and withdraw any collected tokens
+    /// or ETH. The provided `liquidity` value must be less than or equal to the total available liquidity, which
     /// can be obtained by calling `availableLiquidity`.
-    function decreaseLiquidity(
-        uint256 tokenId,
-        uint128 liquidity,
-        uint256 amount0Min,
-        uint256 amount1Min,
+    /// @dev It works by wrapping multiple different calls to the position manager contract, specifically:
+    /// * `decreaseLiquidity` - Decrease the liquidity position and increase the amount of tokens owed
+    /// * `collect` - Collect the owed, sending them (temporarily) to the position manager contract
+    /// * `unwrapWETH9` - If either of the tokens is WETH, unwrap them to ETH and transfer them to the recipient
+    /// * `sweepToken` - Transfer any tokens left in the position manager contract to the recipient
+    function withdrawLiquidity(
+        uint256 tokenId, 
+        address recipient, 
+        uint128 liquidity, 
+        uint256 amount0Min, 
+        uint256 amount1Min, 
         uint256 deadline
     ) external {
         require(ERC721.ownerOf(tokenId) == msg.sender, "Not authorized");
@@ -124,21 +132,33 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         require(liquidity <= available, "Liquidity unavailable");
         position.decreasedLiquidity += liquidity;
 
+        // Step 1: Decrease the liquidity position
         INonfungiblePositionManager manager = INonfungiblePositionManager(position.positionManager);
-        INonfungiblePositionManager.DecreaseLiquidityParams memory params = INonfungiblePositionManager.DecreaseLiquidityParams({
+        INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams = INonfungiblePositionManager.DecreaseLiquidityParams({
             tokenId: position.uniswapTokenId,
             liquidity: liquidity,
             amount0Min: amount0Min,
             amount1Min: amount1Min,
             deadline: deadline
         });
-        (uint256 amount0, uint256 amount1) = manager.decreaseLiquidity(params);
+        manager.decreaseLiquidity(decreaseParams);
 
-        IERC20 token0Contract = IERC20(position.token0);
-        IERC20 token1Contract = IERC20(position.token1);
+        // Step 2: Collect all available tokens into the position manager contract
+        INonfungiblePositionManager.CollectParams memory collectParams = INonfungiblePositionManager.CollectParams({
+            tokenId: position.uniswapTokenId,
+            recipient: address(0), // address(0) is a magic number referring to the address of the position manager contract
+            amount0Max: type(uint128).max,
+            amount1Max: type(uint128).max
+        });
+        manager.collect(collectParams);
 
-        token0Contract.transfer(msg.sender, amount0);
-        token1Contract.transfer(msg.sender, amount1);
+        // Step 3: Unwrap WETH or sweep tokens
+        IPeripheryImmutableState state = IPeripheryImmutableState(position.positionManager);
+        address WETHAddress = state.WETH9();
+
+        IPeripheryPayments payments = IPeripheryPayments(position.positionManager);
+        unwrapWETHOrSweep(position.token0, recipient, amount0Min, payments, WETHAddress);
+        unwrapWETHOrSweep(position.token1, recipient, amount1Min, payments, WETHAddress);
     }
 
     /// @notice Returns the locked Uniswap token to the original owner and deletes the lock token
@@ -225,5 +245,23 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         bytes calldata operatorData
     ) external {
         // todo: Do we need to do any validation here?
+    }
+
+    // MARK: - Private helper functions
+
+    /// @dev Either call `unwrapWETH9` or `sweepToken` on the provided payments contract depending on
+    /// whether the token address refers to WETH or a regular ERC-20 token.
+    function unwrapWETHOrSweep(
+        address tokenAddress, 
+        address recipient,
+        uint256 amountMinimum, 
+        IPeripheryPayments payments, 
+        address WETHAddress
+    ) private {
+        if (tokenAddress == WETHAddress) {
+            payments.unwrapWETH9(amountMinimum, recipient);
+        } else {
+            payments.sweepToken(tokenAddress, amountMinimum, recipient);
+        }
     }
 }
