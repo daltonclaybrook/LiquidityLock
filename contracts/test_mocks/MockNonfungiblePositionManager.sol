@@ -27,9 +27,6 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
         createMockPosition();
     }
 
-    /// @dev Enables the contract to receive ETH for later unwrapping
-    receive() external payable {}
-
     // MARK - INonfungiblePositionManager
 
     function positions(uint256 tokenId) external view returns (
@@ -90,28 +87,35 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
         // At least one of the tokens in the position must have a balance higher than the liquidity
         require(balance0 > position.liquidity || balance1 > position.liquidity, "Not enough tokens");
 
+        // Mimic functionality in the real position manager that converts the zero address to `this` address.
+        address recipient = params.recipient == address(0) ? address(this) : params.recipient;
+
         // Transfer any tokens that are higher than the liquidity in the position meaning that they have been received
         // after the position was created, simulating a fee.
         amount0 = balance0 - position.liquidity;
         amount1 = balance1 - position.liquidity;
-        transferToken(token0, params.recipient, amount0);
-        transferToken(token1, params.recipient, amount1);
+        transferToken(token0, recipient, amount0);
+        transferToken(token1, recipient, amount1);
     }
 
     // MARK: - IPeripheryPayments
 
     /// @notice Unwraps the contract's WETH9 balance and sends it to recipient as ETH.
-    function unwrapWETH9(uint256 amountMinimum, address recipient) external payable {
-        // todo: implement
+    function unwrapWETH9(uint256 /*amountMinimum*/, address recipient) external payable {
+        uint256 balance = token0.balanceOf(address(this));
+        token0.convertTokensAndSendETH(recipient, balance);
     }
 
     /// @notice Transfers the full amount of a token held by this contract to recipient
     function sweepToken(
         address token,
-        uint256 amountMinimum,
+        uint256 /*amountMinimum*/,
         address recipient
     ) external payable {
-        // todo: implement
+        IERC20 tokenContract = IERC20(token);
+        uint256 balance = tokenContract.balanceOf(address(this));
+        require(balance > 0, "Insufficient balance");
+        tokenContract.transfer(recipient, balance);
     }
 
     // MARK: - IPeripheryImmutableState
