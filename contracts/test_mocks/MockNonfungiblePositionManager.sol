@@ -9,12 +9,12 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, IPeripheryPayments, IPeripheryImmutableState {
-    uint256 private _nextId = 123;
     // token0 is mocking the WETH address
     MockToken public token0;
     MockToken public token1;
     
-    mapping(uint256 => Position) private _positions;
+    uint256 private _positionId = 123;
+    Position private _position;
 
     struct Position {
         address originalOwner;
@@ -62,8 +62,7 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
 
     function decreaseLiquidity(DecreaseLiquidityParams calldata params) external payable returns (uint256 amount0, uint256 amount1) {
         require(_exists(params.tokenId), "No existing position");
-        Position storage position = _positions[params.tokenId];
-        require(params.liquidity <= position.liquidity, "Not enough liquidity available");
+        require(params.liquidity <= _position.liquidity, "Not enough liquidity available");
         require(params.liquidity > 0, "Invalid liquidity param");
 
         (uint256 balance0, uint256 balance1) = tokenBalances();
@@ -71,7 +70,7 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
 
         transferToken(token0, msg.sender, params.liquidity);
         transferToken(token1, msg.sender, params.liquidity);
-        position.liquidity -= params.liquidity;
+        _position.liquidity -= params.liquidity;
 
         return (params.liquidity, params.liquidity);
     }
@@ -81,19 +80,18 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
     /// If no extra tokens exist, this call will revert.
     function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1) {
         require(_exists(params.tokenId), "No existing position");
-        Position storage position = _positions[params.tokenId];
         
         (uint256 balance0, uint256 balance1) = tokenBalances();
         // At least one of the tokens in the position must have a balance higher than the liquidity
-        require(balance0 > position.liquidity || balance1 > position.liquidity, "Not enough tokens");
+        require(balance0 > _position.liquidity || balance1 > _position.liquidity, "Not enough tokens");
 
         // Mimic functionality in the real position manager that converts the zero address to `this` address.
         address recipient = params.recipient == address(0) ? address(this) : params.recipient;
 
         // Transfer any tokens that are higher than the liquidity in the position meaning that they have been received
         // after the position was created, simulating a fee.
-        amount0 = balance0 - position.liquidity;
-        amount1 = balance1 - position.liquidity;
+        amount0 = balance0 - _position.liquidity;
+        amount1 = balance1 - _position.liquidity;
         transferToken(token0, recipient, amount0);
         transferToken(token1, recipient, amount1);
     }
@@ -103,7 +101,10 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
     /// @notice Unwraps the contract's WETH9 balance and sends it to recipient as ETH.
     function unwrapWETH9(uint256 /*amountMinimum*/, address recipient) external payable {
         uint256 balance = token0.balanceOf(address(this));
-        token0.convertTokensAndSendETH(recipient, balance);
+        uint256 surplus = balance - _position.liquidity;
+        if (surplus > 0) {
+            token0.convertTokensAndSendETH(recipient, surplus);
+        }
     }
 
     /// @notice Transfers the full amount of a token held by this contract to recipient
@@ -131,13 +132,12 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
         (uint256 balance0, uint256 balance1) = tokenBalances();
         require (balance0 == balance1 && balance0 > 0, "Incorrect balances to make position");
 
-        _mint(msg.sender, _nextId);
-        _positions[_nextId] = Position({
+        _mint(msg.sender, _positionId);
+        _position = Position({
             originalOwner: msg.sender,
             liquidity: uint128(balance0)
         });
-        _nextId++;
-        return _nextId - 1;
+        return _positionId;
     }
 
     function tokenBalances() private view returns (uint256 token0Balance, uint256 token1Balance) {

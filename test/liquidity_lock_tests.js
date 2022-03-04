@@ -61,6 +61,13 @@ contract("LiquidityLock", (accounts) => {
             assert.equal(balance1.toString(), "1000000");
         });
 
+        it("has one million Wei in token contract", async () => {
+            const manager = await PositionManager.deployed();
+            const token0 = await manager.token0();
+            const balance = await web3.eth.getBalance(token0);
+            assert.equal(balance.toString(), "1000000");
+        });
+
         it("successfully creates a mock position", async () => {
             const manager = await PositionManager.deployed();
             const owner = await manager.ownerOf(123); // token ID 1
@@ -168,7 +175,7 @@ contract("LiquidityLock", (accounts) => {
         });
     });
 
-    contract("collect tokens and withdraw", (accounts) => {
+    contract("collect and withdraw tokens", (accounts) => {
         before(async () => {
             const manager = await PositionManager.deployed();
             const lock = await LiquidityLock.deployed();
@@ -182,6 +189,21 @@ contract("LiquidityLock", (accounts) => {
                 lock.collectAndWithdrawTokens(1, accounts[1], max, max, { from: accounts[1] }),
                 'Not authorized'
             )
+        });
+
+        it("calls mock collect and returns surplus non-WETH tokens", async () => {
+            const lock = await LiquidityLock.deployed();
+            const manager = await PositionManager.deployed();
+            const token1 = await MockToken.at(await manager.token1());
+            // mint 300 tokens to the manager to use as the fee
+            await token1.mockMint(manager.address, 300);
+            
+            const max = new BN("1000000000"); // 1B
+            const preBalance = await token1.balanceOf(accounts[0]);
+            await lock.collectAndWithdrawTokens(1, accounts[0], max, max);
+            const postBalance = await token1.balanceOf(accounts[0]);
+
+            assert.equal(postBalance.sub(preBalance).toString(), "300");
         });
 
         it("calls mock collect and returns surplus tokens", async () => {
