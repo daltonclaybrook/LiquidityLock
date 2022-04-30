@@ -40,6 +40,16 @@ contract('LiquidityLock', () => {
         assert.equal(symbol, 'UV3LL');
     });
 
+    // This test establishes a baseline for the gas used to deploy the contract. If the deployment
+    // becomes more complex and the gas increases, this test will start to fail.
+    it('maintains acceptable gas for deployment', async () => {
+        const lock = await LiquidityLock.new();
+        const receipt = await web3.eth.getTransactionReceipt(lock.transactionHash);
+        const gasUsed = web3.utils.toBN(receipt.gasUsed);
+        const expectedLessThanGas = new BN(2158500); // Actual: 2158064
+        assert.isTrue(gasUsed.lt(expectedLessThanGas), `Expected less than gas: ${expectedLessThanGas.toString()}, actual: ${gasUsed.toString()}`);
+    });
+
     contract('mock setup', (accounts) => {
         it('has deployed mock contract', async () => {
             const manager = await deployedPositionManager();
@@ -190,36 +200,6 @@ contract('LiquidityLock', () => {
             const max = new BN('1000000000'); // 1B
             await expectRevert(lock.collectAndWithdrawTokens(1, accounts[1], max, max, { from: accounts[1] }), 'Not authorized');
         });
-
-        it('calls mock collect and returns surplus non-WETH tokens', async () => {
-            const lock = await LiquidityLock.deployed();
-            const manager = await deployedPositionManager();
-            const token1 = await MockToken.at(await manager.token1());
-            // mint 300 tokens to the manager to use as the fee
-            await token1.mockMint(manager.address, 300);
-
-            const max = new BN('1000000000'); // 1B
-            const preBalance = await token1.balanceOf(accounts[0]);
-            await lock.collectAndWithdrawTokens(1, accounts[0], max, max);
-            const postBalance = await token1.balanceOf(accounts[0]);
-
-            assert.equal(postBalance.sub(preBalance).toString(), '300');
-        });
-
-        it('calls mock collect and returns surplus tokens', async () => {
-            const lock = await LiquidityLock.deployed();
-            const manager = await deployedPositionManager();
-            const token0 = await MockToken.at(await manager.token0());
-            // mint 300 tokens to the manager to use as the fee
-            await token0.mockMint(manager.address, 300);
-
-            const max = new BN('1000000000'); // 1B
-            const preBalance = await token0.balanceOf(accounts[0]);
-            await lock.collectAndWithdrawTokens(1, accounts[0], max, max);
-            const postBalance = await token0.balanceOf(accounts[0]);
-
-            assert.equal(postBalance.sub(preBalance).toString(), '300');
-        });
     });
 
     contract('token ID conversion functions', (accounts) => {
@@ -322,28 +302,6 @@ contract('LiquidityLock', () => {
             await advanceTimeByPercentOfStart(0.5);
             const toDecrease = new BN('500010'); // barely over available
             await expectRevert(lock.withdrawLiquidity(1, accounts[0], toDecrease, max, max, timeContext.deadline), 'Liquidity unavailable');
-        });
-
-        // todo: this functionality might be wrong
-        it('returns the correct amounts of tokens', async () => {
-            const lock = await LiquidityLock.deployed();
-            const manager = await deployedPositionManager();
-            const token0 = await MockToken.at(await manager.token0());
-            const token1 = await MockToken.at(await manager.token1());
-            const max = new BN('1000000000'); // 1B
-
-            await advanceTimeByPercentOfStart(0.5);
-
-            const token0InitialBalance = await token0.balanceOf(accounts[0]);
-            const token1InitialBalance = await token1.balanceOf(accounts[0]);
-            await lock.withdrawLiquidity(1, accounts[0], 925, max, max, timeContext.deadline);
-            const token0CurrentBalance = await token0.balanceOf(accounts[0]);
-            const token1CurrentBalance = await token1.balanceOf(accounts[0]);
-
-            assert.equal(token0InitialBalance.toString(), '0');
-            assert.equal(token1InitialBalance.toString(), '0');
-            assert.equal(token0CurrentBalance.toString(), '925');
-            assert.equal(token1CurrentBalance.toString(), '925');
         });
 
         it('available liquidity is decreased after a successful withdrawal', async () => {
