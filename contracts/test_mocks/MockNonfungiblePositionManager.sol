@@ -44,7 +44,6 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
         uint128 tokensOwed1
     ) {
         require(_exists(tokenId), "No existing position");
-        Position storage position = _positions[tokenId];
 
         nonce = 0; // unused
         operator = ERC721.ownerOf(tokenId);
@@ -53,7 +52,7 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
         fee = 3000; // unused
         tickLower = 0; // unused
         tickUpper = 0; // unused
-        liquidity = position.liquidity;
+        liquidity = _position.liquidity;
         feeGrowthInside0LastX128 = 0; // unused
         feeGrowthInside1LastX128 = 0; // unused
         tokensOwed0 = 0; // unused
