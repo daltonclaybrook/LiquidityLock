@@ -47,7 +47,10 @@ contract('LiquidityLock', () => {
         const receipt = await web3.eth.getTransactionReceipt(lock.transactionHash);
         const gasUsed = web3.utils.toBN(receipt.gasUsed);
         const expectedLessThanGas = new BN(2158500); // Actual: 2158064
-        assert.isTrue(gasUsed.lt(expectedLessThanGas), `Expected less than gas: ${expectedLessThanGas.toString()}, actual: ${gasUsed.toString()}`);
+        assert.isTrue(
+            gasUsed.lt(expectedLessThanGas),
+            `Expected less than gas: ${expectedLessThanGas.toString()}, actual: ${gasUsed.toString()}`
+        );
     });
 
     contract('mock setup', (accounts) => {
@@ -59,23 +62,23 @@ contract('LiquidityLock', () => {
 
         it('deploys two unique mock tokens', async () => {
             const manager = await deployedPositionManager();
-            const token0 = await MockToken.at(await manager.token0());
-            const token1 = await MockToken.at(await manager.token1());
+            const wethToken = await MockToken.at(await manager.mockWETHToken());
+            const erc20Token = await MockToken.at(await manager.mockERC20Token());
 
-            assert.notEqual(token0.address, token1.address);
-            assert.equal(token0.address.length, 42);
-            assert.equal(token1.address.length, 42);
+            assert.notEqual(wethToken.address, erc20Token.address);
+            assert.equal(wethToken.address.length, 42);
+            assert.equal(erc20Token.address.length, 42);
 
-            assert.equal(await token0.name(), 'Mock Token 0');
-            assert.equal(await token1.name(), 'Mock Token 1');
-            assert.equal(await token0.symbol(), 'MT0');
-            assert.equal(await token1.symbol(), 'MT1');
+            assert.equal(await wethToken.name(), 'Mock Token 0');
+            assert.equal(await erc20Token.name(), 'Mock Token 1');
+            assert.equal(await wethToken.symbol(), 'WETH');
+            assert.equal(await erc20Token.symbol(), 'ERC20');
         });
 
         it('mints one million of each mock token to manager', async () => {
             const manager = await deployedPositionManager();
-            const token0 = await MockToken.at(await manager.token0());
-            const token1 = await MockToken.at(await manager.token1());
+            const token0 = await MockToken.at(await manager.mockWETHToken());
+            const token1 = await MockToken.at(await manager.mockERC20Token());
 
             const balance0 = await token0.balanceOf(manager.address);
             const balance1 = await token1.balanceOf(manager.address);
@@ -85,7 +88,7 @@ contract('LiquidityLock', () => {
 
         it('has one million Wei in token contract', async () => {
             const manager = await deployedPositionManager();
-            const token0 = await manager.token0();
+            const token0 = await manager.mockWETHToken();
             const balance = await web3.eth.getBalance(token0);
             assert.equal(balance.toString(), '1000000');
         });
@@ -104,7 +107,10 @@ contract('LiquidityLock', () => {
         it('fails if data field is empty', async () => {
             const manager = await deployedPositionManager();
             const lock = await LiquidityLock.deployed();
-            await expectRevert(manager.safeTransferFrom(accounts[0], lock.address, 123, '0x'), 'Invalid data field. Must contain two timestamps.');
+            await expectRevert(
+                manager.safeTransferFrom(accounts[0], lock.address, 123, '0x'),
+                'Invalid data field. Must contain two timestamps.'
+            );
         });
 
         it('fails if timestamps are in the past', async () => {
@@ -292,7 +298,10 @@ contract('LiquidityLock', () => {
         it('fails if account does not own the token', async () => {
             const lock = await LiquidityLock.deployed();
             const max = new BN('1000000000'); // 1B
-            await expectRevert(lock.withdrawLiquidity(1, accounts[1], 100, max, max, timeContext.deadline, { from: accounts[1] }), 'Not authorized');
+            await expectRevert(
+                lock.withdrawLiquidity(1, accounts[1], 100, max, max, timeContext.deadline, { from: accounts[1] }),
+                'Not authorized'
+            );
         });
 
         it('fails if the request amount of liquidity is unavailable', async () => {
@@ -301,7 +310,10 @@ contract('LiquidityLock', () => {
 
             await advanceTimeByPercentOfStart(0.5);
             const toDecrease = new BN('500010'); // barely over available
-            await expectRevert(lock.withdrawLiquidity(1, accounts[0], toDecrease, max, max, timeContext.deadline), 'Liquidity unavailable');
+            await expectRevert(
+                lock.withdrawLiquidity(1, accounts[0], toDecrease, max, max, timeContext.deadline),
+                'Liquidity unavailable'
+            );
         });
 
         it('available liquidity is decreased after a successful withdrawal', async () => {

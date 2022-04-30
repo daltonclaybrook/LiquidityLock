@@ -9,22 +9,35 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, IPeripheryPayments, IPeripheryImmutableState {
-    // token0 is mocking the WETH address
-    MockToken public token0;
-    MockToken public token1;
+    MockToken public mockWETHToken;
+    MockToken public mockERC20Token;
     
-    uint256 private _positionId = 123;
-    Position private _position;
+    /// The mock liquity that is returned from calls to `positions`
+    uint128 public mockLiquidity = 0;
+    /// The ERC-721 token ID to use as the mock position
+    uint256 public mockPositionId = 123;
 
-    struct Position {
-        address originalOwner;
-        uint128 liquidity;
-    }
+    /// When `descreaseLiquidity` is called, an entry is added to this map with the
+    /// provided `tokenId` as the key.
+    mapping(uint256 => DecreaseLiquidityParams) public _didDecreaseLiquidity;
+
+    /// When `collect` is called, an entry is added to this map with the provided
+    /// `tokenId` as the key.
+    mapping(uint256 => CollectParams) public _didCollect;
+
+    /// When `unwrapWETH9` is called, an entry is added to this map with the
+    /// provided `recipient` as the key and a value of `true`.
+    mapping(address => bool) public _didUnwrapWETH9;
+
+    /// These mappings are populated on calls to `sweepToken`. The map
+    /// token to the recipient, and the recipient to the token respectively.
+    mapping(address => address) public _didSweepToken_tokenToRecipient;
+    mapping(address => address) public _didSweepToken_recipientToToken;
 
     constructor(uint256 mintTokens) ERC721("MockPositionManager", "MPM") {
-        token0 = new MockToken("Mock Token 0", "MT0", mintTokens);
-        token1 = new MockToken("Mock Token 1", "MT1", mintTokens);
-        createMockPosition();
+        mockWETHToken = new MockToken("Mock Token 0", "WETH", mintTokens);
+        mockERC20Token = new MockToken("Mock Token 1", "ERC20", mintTokens);
+        _mint(msg.sender, mockPositionId);
     }
 
     // MARK - INonfungiblePositionManager
@@ -47,12 +60,12 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
 
         nonce = 0; // unused
         operator = ERC721.ownerOf(tokenId);
-        _token0 = address(token0);
-        _token1 = address(token1);
+        _token0 = address(mockWETHToken);
+        _token1 = address(mockERC20Token);
         fee = 3000; // unused
         tickLower = 0; // unused
         tickUpper = 0; // unused
-        liquidity = _position.liquidity;
+        liquidity = mockLiquidity;
         feeGrowthInside0LastX128 = 0; // unused
         feeGrowthInside1LastX128 = 0; // unused
         tokensOwed0 = 0; // unused
@@ -60,50 +73,20 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
     }
 
     function decreaseLiquidity(DecreaseLiquidityParams calldata params) external payable returns (uint256 amount0, uint256 amount1) {
-        require(_exists(params.tokenId), "No existing position");
-        require(params.liquidity <= _position.liquidity, "Not enough liquidity available");
-        require(params.liquidity > 0, "Invalid liquidity param");
-
-        (uint256 balance0, uint256 balance1) = tokenBalances();
-        require(balance0 >= params.liquidity && balance1 >= params.liquidity, "Balance too low");
-
-        transferToken(token0, msg.sender, params.liquidity);
-        transferToken(token1, msg.sender, params.liquidity);
-        _position.liquidity -= params.liquidity;
-
-        return (params.liquidity, params.liquidity);
+        _didDecreaseLiquidity[params.tokenId] = params;
+        (amount0, amount1) = (0, 0);
     }
 
-    /// @dev To simulate a fee being earned, after creating a position, transfer more tokens from either token contract
-    /// to this contract. Calling this function will transfer any extra tokens received after the position was created.
-    /// If no extra tokens exist, this call will revert.
     function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1) {
-        require(_exists(params.tokenId), "No existing position");
-        
-        (uint256 balance0, uint256 balance1) = tokenBalances();
-        // At least one of the tokens in the position must have a balance higher than the liquidity
-        require(balance0 > _position.liquidity || balance1 > _position.liquidity, "Not enough tokens");
-
-        // Mimic functionality in the real position manager that converts the zero address to `this` address.
-        address recipient = params.recipient == address(0) ? address(this) : params.recipient;
-
-        // Transfer any tokens that are higher than the liquidity in the position meaning that they have been received
-        // after the position was created, simulating a fee.
-        amount0 = balance0 - _position.liquidity;
-        amount1 = balance1 - _position.liquidity;
-        transferToken(token0, recipient, amount0);
-        transferToken(token1, recipient, amount1);
+        _didCollect[params.tokenId] = params;
+        (amount0, amount1) = (0, 0);
     }
 
     // MARK: - IPeripheryPayments
 
     /// @notice Unwraps the contract's WETH9 balance and sends it to recipient as ETH.
     function unwrapWETH9(uint256 /*amountMinimum*/, address recipient) external payable {
-        uint256 balance = token0.balanceOf(address(this));
-        uint256 surplus = balance - _position.liquidity;
-        if (surplus > 0) {
-            token0.convertTokensAndSendETH(recipient, surplus);
-        }
+        _didUnwrapWETH9[recipient] = true;
     }
 
     /// @notice Transfers the full amount of a token held by this contract to recipient
@@ -112,40 +95,18 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
         uint256 /*amountMinimum*/,
         address recipient
     ) external payable {
-        IERC20 tokenContract = IERC20(token);
-        uint256 balance = tokenContract.balanceOf(address(this));
-        require(balance > 0, "Insufficient balance");
-        tokenContract.transfer(recipient, balance);
+        _didSweepToken_recipientToToken[recipient] = token;
+        _didSweepToken_tokenToRecipient[token] = recipient;
     }
 
     // MARK: - IPeripheryImmutableState
 
     /// @return Returns the address of WETH9
     function WETH9() external view returns (address) {
-        return address(token0);
+        return address(mockWETHToken);
     }
 
     // MARK: - Mock helper functions
 
-    function createMockPosition() public returns (uint256 tokenId) {
-        (uint256 balance0, uint256 balance1) = tokenBalances();
-        require (balance0 == balance1 && balance0 > 0, "Incorrect balances to make position");
-
-        _mint(msg.sender, _positionId);
-        _position = Position({
-            originalOwner: msg.sender,
-            liquidity: uint128(balance0)
-        });
-        return _positionId;
-    }
-
-    function tokenBalances() private view returns (uint256 token0Balance, uint256 token1Balance) {
-        token0Balance = token0.balanceOf(address(this));
-        token1Balance = token1.balanceOf(address(this));
-    }
-
-    function transferToken(MockToken token, address to, uint256 amount) private {
-        if (amount <= 0) { return; }
-        token.transfer(to, amount);
-    }
+    // todo
 }
