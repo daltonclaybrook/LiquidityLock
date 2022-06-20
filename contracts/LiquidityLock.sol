@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.12;
 
-import "./third_party/INonfungiblePositionManager.sol";
-import "./third_party/IPeripheryImmutableState.sol";
-import "./third_party/IPeripheryPayments.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import "@openzeppelin/contracts/token/ERC777/IERC777Recipient.sol";
+import './third_party/INonfungiblePositionManager.sol';
+import './third_party/IPeripheryImmutableState.sol';
+import './third_party/IPeripheryPayments.sol';
+import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import '@openzeppelin/contracts/token/ERC721/ERC721.sol';
+import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
+import '@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol';
+import '@openzeppelin/contracts/token/ERC777/IERC777Recipient.sol';
 
 /// A contract used to lock liquidity for Uniswap V3 pools
 contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
@@ -43,8 +43,7 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         uint256 finishUnlockingTimestamp;
     }
 
-    constructor() ERC721("Uniswap V3 Liquidity Lock", "UV3LL") {
-    }
+    constructor() ERC721('Uniswap V3 Liquidity Lock', 'UV3LL') {}
 
     // MARK: - LiquidityLock public interface
 
@@ -52,29 +51,29 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
     /// by this contract
     function ownerOfUniswap(uint256 _uniswapTokenId) external view returns (address owner) {
         uint256 _lockTokenId = _uniswapTokenIdsToLock[_uniswapTokenId];
-        require(_lockTokenId != 0, "No lock token");
+        require(_lockTokenId != 0, 'No lock token');
         return ownerOf(_lockTokenId);
     }
 
     /// @notice Returns the token ID of the locked position token that wraps the provided uniswap token
     function lockTokenId(uint256 _uniswapTokenId) external view returns (uint256 _lockTokenId) {
         _lockTokenId = _uniswapTokenIdsToLock[_uniswapTokenId];
-        require(_lockTokenId != 0, "No lock token");
+        require(_lockTokenId != 0, 'No lock token');
     }
 
     /// @notice Returns the token ID of the Uniswap token that is locked and represented by the provided
     /// lock token ID
     function uniswapTokenId(uint256 _lockTokenId) external view returns (uint256 _uniswapTokenId) {
-        require(_exists(_lockTokenId), "Invalid token ID");
+        require(_exists(_lockTokenId), 'Invalid token ID');
         LockedPosition storage position = _positions[_lockTokenId];
         _uniswapTokenId = position.uniswapTokenId;
     }
 
     /// @notice Returns the total amount of liquidity available to be withdrawn at this time
     function availableLiquidity(uint256 tokenId) public view returns (uint128) {
-        require(_exists(tokenId), "Invalid token ID");
+        require(_exists(tokenId), 'Invalid token ID');
         LockedPosition storage position = _positions[tokenId];
-        
+
         uint256 timestamp = block.timestamp;
         if (position.startUnlockingTimestamp > timestamp) {
             // The liquidity has not yet begun to unlock
@@ -86,8 +85,9 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         }
 
         // The ratio of liquidity available in parts per thousand (not percent)
-        uint256 unlockPerMille = (timestamp - position.startUnlockingTimestamp) * 1000 / (position.finishUnlockingTimestamp - position.startUnlockingTimestamp);
-        uint256 unlockedLiquidity = position.initialLiquidity * unlockPerMille / 1000;
+        uint256 unlockPerMille = ((timestamp - position.startUnlockingTimestamp) * 1000) /
+            (position.finishUnlockingTimestamp - position.startUnlockingTimestamp);
+        uint256 unlockedLiquidity = (position.initialLiquidity * unlockPerMille) / 1000;
         return uint128(unlockedLiquidity - position.decreasedLiquidity);
     }
 
@@ -107,22 +107,23 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         uint256 amount1Min,
         uint256 deadline
     ) external {
-        require(ERC721.ownerOf(tokenId) == msg.sender, "Not authorized");
+        require(ERC721.ownerOf(tokenId) == msg.sender, 'Not authorized');
         LockedPosition storage position = _positions[tokenId];
 
         uint128 available = availableLiquidity(tokenId);
-        require(liquidity <= available, "Liquidity unavailable");
+        require(liquidity <= available, 'Liquidity unavailable');
         position.decreasedLiquidity += liquidity;
 
         // Decrease the liquidity position
         INonfungiblePositionManager manager = INonfungiblePositionManager(position.positionManager);
-        INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams = INonfungiblePositionManager.DecreaseLiquidityParams({
-            tokenId: position.uniswapTokenId,
-            liquidity: liquidity,
-            amount0Min: amount0Min,
-            amount1Min: amount1Min,
-            deadline: deadline
-        });
+        INonfungiblePositionManager.DecreaseLiquidityParams memory decreaseParams = INonfungiblePositionManager
+            .DecreaseLiquidityParams({
+                tokenId: position.uniswapTokenId,
+                liquidity: liquidity,
+                amount0Min: amount0Min,
+                amount1Min: amount1Min,
+                deadline: deadline
+            });
         manager.decreaseLiquidity(decreaseParams);
 
         // Collect all available tokens into the position manager contract
@@ -139,7 +140,7 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         uint256 amount0Min,
         uint256 amount1Min
     ) external {
-        require(ERC721.ownerOf(tokenId) == msg.sender, "Not authorized");
+        require(ERC721.ownerOf(tokenId) == msg.sender, 'Not authorized');
         _collectAndWithdrawTokens(tokenId, recipient, amount0Min, amount1Min);
     }
 
@@ -147,11 +148,11 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
     /// @dev This can only be done if the current timestamp is greater than the finish timestamp
     /// of the locked position.
     function returnUniswapToken(uint256 tokenId) external {
-        require(ERC721.ownerOf(tokenId) == msg.sender, "Not authorized");
+        require(ERC721.ownerOf(tokenId) == msg.sender, 'Not authorized');
         LockedPosition storage position = _positions[tokenId];
 
         uint256 timestamp = block.timestamp;
-        require(timestamp >= position.finishUnlockingTimestamp, "Not completely unlocked");
+        require(timestamp >= position.finishUnlockingTimestamp, 'Not completely unlocked');
 
         IERC721 manager = IERC721(position.positionManager);
         manager.safeTransferFrom(address(this), msg.sender, position.uniswapTokenId);
@@ -164,11 +165,11 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
     // MARK: - IERC721Receiver
 
     function onERC721Received(
-        address /*operator*/,
+        address, /*operator*/
         address from,
         uint256 tokenId,
         bytes calldata data
-    ) override external returns (bytes4) {
+    ) external override returns (bytes4) {
         INonfungiblePositionManager manager = INonfungiblePositionManager(msg.sender);
         (
             /* uint96 nonce */,
@@ -185,18 +186,18 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
             /* uint128 tokensOwed1 */
         ) = manager.positions(tokenId);
 
-        require(liquidity > 0, "Not enough liquidity to lock");
-        require(token0 != address(0) && token1 != address(0), "Invalid token address");
+        require(liquidity > 0, 'Not enough liquidity to lock');
+        require(token0 != address(0) && token1 != address(0), 'Invalid token address');
 
         // Sanity check length of provided data before trying to decode.
-        require(data.length == 64, "Invalid data field. Must contain two timestamps.");
+        require(data.length == 64, 'Invalid data field. Must contain two timestamps.');
         // The `data` parameter is expected to contain the start and finish timestamps
         (uint256 startTimestamp, uint256 finishTimestamp) = abi.decode(data, (uint256, uint256));
-        
+
         // The start and finish timestamps should be in the future, and the finish timestamp should be
         // farther in the future than the start timestamp
         uint256 timestamp = block.timestamp;
-        require(startTimestamp >= timestamp && finishTimestamp > startTimestamp, "Invalid timestamps");
+        require(startTimestamp >= timestamp && finishTimestamp > startTimestamp, 'Invalid timestamps');
 
         // Mint an NFT representing this locked position with `from` as the owner
         _mint(from, _nextId);
