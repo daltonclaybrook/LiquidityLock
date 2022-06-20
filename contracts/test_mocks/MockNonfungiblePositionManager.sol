@@ -108,5 +108,7 @@ contract MockNonfungiblePositionManager is ERC721, INonfungiblePositionManager, 
 
     // MARK: - Mock helper functions
 
-    // todo
+    function setMockLiquidity(uint128 _mockLiquidity) external {
+        mockLiquidity = _mockLiquidity;
+    }
 }

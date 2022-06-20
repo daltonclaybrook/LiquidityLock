@@ -95,6 +95,7 @@ contract('LiquidityLock', () => {
 
         it('successfully creates a mock position', async () => {
             const manager = await deployedPositionManager();
+            await manager.setMockLiquidity('1000000');
             const owner = await manager.ownerOf(123); // token ID 1
             const positions = await manager.positions(123);
             assert.equal(owner, accounts[0]);
@@ -104,6 +105,11 @@ contract('LiquidityLock', () => {
     });
 
     contract('token transfer', (accounts) => {
+        before(async () => {
+            const manager = await deployedPositionManager();
+            await manager.setMockLiquidity('1000000');
+        });
+
         it('fails if data field is empty', async () => {
             const manager = await deployedPositionManager();
             const lock = await LiquidityLock.deployed();
@@ -151,6 +157,7 @@ contract('LiquidityLock', () => {
     contract('available liquidity', (accounts) => {
         before(async () => {
             const manager = await deployedPositionManager();
+            await manager.setMockLiquidity('1000000');
             const lock = await LiquidityLock.deployed();
             await transferInitialToken(manager, lock, accounts);
         });
@@ -197,6 +204,7 @@ contract('LiquidityLock', () => {
     contract('collect and withdraw tokens', (accounts) => {
         before(async () => {
             const manager = await deployedPositionManager();
+            await manager.setMockLiquidity('1000000');
             const lock = await LiquidityLock.deployed();
             await transferInitialToken(manager, lock, accounts);
         });
@@ -211,6 +219,7 @@ contract('LiquidityLock', () => {
     contract('token ID conversion functions', (accounts) => {
         before(async () => {
             const manager = await deployedPositionManager();
+            await manager.setMockLiquidity('1000000');
             const lock = await LiquidityLock.deployed();
             await transferInitialToken(manager, lock, accounts);
         });
@@ -241,6 +250,7 @@ contract('LiquidityLock', () => {
     contract('owner of uniswap', (accounts) => {
         before(async () => {
             const manager = await deployedPositionManager();
+            await manager.setMockLiquidity('1000000');
             const lock = await LiquidityLock.deployed();
             await transferInitialToken(manager, lock, accounts);
         });
@@ -260,6 +270,7 @@ contract('LiquidityLock', () => {
     contract('return uniswap token', (accounts) => {
         before(async () => {
             const manager = await deployedPositionManager();
+            await manager.setMockLiquidity('1000000');
             const lock = await LiquidityLock.deployed();
             await transferInitialToken(manager, lock, accounts);
         });
@@ -291,6 +302,7 @@ contract('LiquidityLock', () => {
     contract('withdraw liquidity', (accounts) => {
         before(async () => {
             const manager = await deployedPositionManager();
+            await manager.setMockLiquidity('1000000');
             const lock = await LiquidityLock.deployed();
             await transferInitialToken(manager, lock, accounts);
         });
@@ -314,10 +326,6 @@ contract('LiquidityLock', () => {
                 lock.withdrawLiquidity(1, accounts[0], toDecrease, max, max, timeContext.deadline),
                 'Liquidity unavailable'
             );
-        });
-
-        it('available liquidity is decreased after a successful withdrawal', async () => {
-            // todo: implement
         });
     });
 });
