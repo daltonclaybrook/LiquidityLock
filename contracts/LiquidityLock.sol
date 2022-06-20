@@ -43,6 +43,15 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         uint256 finishUnlockingTimestamp;
     }
 
+    // Events
+
+    /// @notice Emitted when a token owner decreases and withdraws liquidity
+    event WithdrawLiquidity(uint256 indexed tokenId, address indexed recipient, uint128 liquidity);
+    /// @notice Emitted when a token owner collects and withdraws tokens without decreasing liquidity
+    event CollectTokens(uint256 indexed tokenId, address indexed recipient);
+    /// @notice Emitted when a Uniswap token is returned after the lock duration has completely elapsed
+    event ReturnUniswap(uint256 indexed lockTokenId, uint256 indexed uniswapTokenId);
+
     constructor() ERC721('Uniswap V3 Liquidity Lock', 'UV3LL') {}
 
     // MARK: - LiquidityLock public interface
@@ -128,6 +137,7 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
 
         // Collect all available tokens into the position manager contract
         _collectAndWithdrawTokens(tokenId, recipient, amount0Min, amount1Min);
+        emit WithdrawLiquidity(tokenId, recipient, liquidity);
     }
 
     /// @notice Collect any tokens due from fees or from decreasing liquidity
@@ -142,6 +152,7 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
     ) external {
         require(ERC721.ownerOf(tokenId) == msg.sender, 'Not authorized');
         _collectAndWithdrawTokens(tokenId, recipient, amount0Min, amount1Min);
+        emit CollectTokens(tokenId, recipient);
     }
 
     /// @notice Returns the locked Uniswap token to the original owner and deletes the lock token
@@ -160,6 +171,7 @@ contract LiquidityLock is ERC721, IERC721Receiver, IERC777Recipient {
         delete _uniswapTokenIdsToLock[position.uniswapTokenId];
         delete _positions[tokenId];
         _burn(tokenId);
+        emit ReturnUniswap(tokenId, position.uniswapTokenId);
     }
 
     // MARK: - IERC721Receiver
