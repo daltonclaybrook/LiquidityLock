@@ -327,6 +327,24 @@ contract('LiquidityLock', () => {
                 'Liquidity unavailable'
             );
         });
+
+        it('succeeds if requested amount of liquidity is available', async () => {
+            const manager = await deployedPositionManager();
+            const lock = await LiquidityLock.deployed();
+            const max = new BN('1000000000'); // 1B
+
+            await advanceTimeByPercentOfStart(0.5);
+            const toDecrease = new BN('499990'); // barely under available
+            await lock.withdrawLiquidity(1, accounts[0], toDecrease, max, max, timeContext.deadline);
+
+            const decreaseParams = await manager._didDecreaseLiquidity(123); // uniswap token ID
+            const liquidity = decreaseParams[1];
+            const recipient = await manager._didSweepToken_tokenToRecipient(await manager.mockERC20Token());
+            const didUnwrapWETH = await manager._didUnwrapWETH9(accounts[0]);
+            assert.equal(liquidity.toString(), toDecrease.toString());
+            assert.equal(recipient, accounts[0]);
+            assert.isTrue(didUnwrapWETH);
+        });
     });
 });
 
