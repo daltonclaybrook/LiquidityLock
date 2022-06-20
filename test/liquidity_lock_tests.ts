@@ -214,6 +214,21 @@ contract('LiquidityLock', () => {
             const max = new BN('1000000000'); // 1B
             await expectRevert(lock.collectAndWithdrawTokens(1, accounts[1], max, max, { from: accounts[1] }), 'Not authorized');
         });
+
+        it('succeeds if you own the token ID', async () => {
+            const manager = await deployedPositionManager();
+            const lock = await LiquidityLock.deployed();
+            const max = new BN('1000000000'); // 1B
+            await lock.collectAndWithdrawTokens(1, accounts[1], max, max, { from: accounts[0] })
+
+            const decreaseParams = await manager._didDecreaseLiquidity(123); // uniswap token ID
+            const liquidity = decreaseParams[1];
+            const recipient = await manager._didSweepToken_tokenToRecipient(await manager.mockERC20Token());
+            const didUnwrapWETH = await manager._didUnwrapWETH9(accounts[1]);
+            assert.equal(liquidity.toString(), '0');
+            assert.equal(recipient, accounts[1]);
+            assert.isTrue(didUnwrapWETH);
+        });
     });
 
     contract('token ID conversion functions', (accounts) => {
