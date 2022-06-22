@@ -48,7 +48,7 @@ This new token ID is the one you will use when performing actions on the contrac
 | Network | Address          |
 | --------| ---------------- |
 | Mainnet | Not yet deployed |
-| Rinkeby | [0x8c301ACd6aB4D7F991A0E958d99CE3c23971a543](https://rinkeby.etherscan.io/address/0x8c301ACd6aB4D7F991A0E958d99CE3c23971a543) |
+| Rinkeby | [0x2236FF5073C5e8A5ef5a9C5d8a29C1e808DE4Bb4](https://rinkeby.etherscan.io/address/0x2236FF5073C5e8A5ef5a9C5d8a29C1e808DE4Bb4) |
 
 ## License
 
