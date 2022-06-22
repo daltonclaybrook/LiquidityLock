@@ -46,7 +46,7 @@ contract('LiquidityLock', () => {
         const lock = await LiquidityLock.new();
         const receipt = await web3.eth.getTransactionReceipt(lock.transactionHash);
         const gasUsed = web3.utils.toBN(receipt.gasUsed);
-        const expectedLessThanGas = new BN(2158500); // Actual: 2158064
+        const expectedLessThanGas = new BN(2202000); // Actual: 2201079
         assert.isTrue(
             gasUsed.lt(expectedLessThanGas),
             `Expected less than gas: ${expectedLessThanGas.toString()}, actual: ${gasUsed.toString()}`
@@ -219,7 +219,7 @@ contract('LiquidityLock', () => {
             const manager = await deployedPositionManager();
             const lock = await LiquidityLock.deployed();
             const max = new BN('1000000000'); // 1B
-            await lock.collectAndWithdrawTokens(1, accounts[1], max, max, { from: accounts[0] })
+            await lock.collectAndWithdrawTokens(1, accounts[1], max, max, { from: accounts[0] });
 
             const decreaseParams = await manager._didDecreaseLiquidity(123); // uniswap token ID
             const liquidity = decreaseParams[1];
@@ -228,6 +228,16 @@ contract('LiquidityLock', () => {
             assert.equal(liquidity.toString(), '0');
             assert.equal(recipient, accounts[1]);
             assert.isTrue(didUnwrapWETH);
+        });
+
+        it('emits event on success', async () => {
+            const lock = await LiquidityLock.deployed();
+            const max = new BN('1000000000'); // 1B
+            const receipt = await lock.collectAndWithdrawTokens(1, accounts[1], max, max, { from: accounts[0] });
+            expectEvent(receipt, 'CollectTokens', {
+                tokenId: new BN(1),
+                recipient: accounts[1],
+            });
         });
     });
 
@@ -307,10 +317,15 @@ contract('LiquidityLock', () => {
             await advanceTimeByPercentOfStart(1.25);
 
             const previousOwner = await manager.ownerOf(123);
-            await lock.returnUniswapToken(1);
+            const receipt = await lock.returnUniswapToken(1);
             const currentOwner = await manager.ownerOf(123);
             assert.equal(previousOwner, lock.address);
             assert.equal(currentOwner, accounts[0]);
+
+            expectEvent(receipt, 'ReturnUniswap', {
+                lockTokenId: new BN(1),
+                uniswapTokenId: new BN(123),
+            });
         });
     });
 
@@ -359,6 +374,18 @@ contract('LiquidityLock', () => {
             assert.equal(liquidity.toString(), toDecrease.toString());
             assert.equal(recipient, accounts[0]);
             assert.isTrue(didUnwrapWETH);
+        });
+
+        it('emits event on success', async () => {
+            const lock = await LiquidityLock.deployed();
+            const max = new BN('1000000000'); // 1B
+            const toDecrease = new BN(1);
+            const receipt = await lock.withdrawLiquidity(1, accounts[0], toDecrease, max, max, timeContext.deadline);
+            expectEvent(receipt, 'WithdrawLiquidity', {
+                tokenId: new BN(1),
+                recipient: accounts[0],
+                liquidity: toDecrease,
+            });
         });
     });
 });
